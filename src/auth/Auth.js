@@ -1,5 +1,7 @@
 import auth0 from "auth0-js";
 
+const REDIRECT_ON_LOGIN = "redirect_on_login";
+
 class Auth {
   /**
    * @param {React-Router-History} history - needed to perform redirect
@@ -20,6 +22,11 @@ class Auth {
   }
 
   login = () => {
+    // we need to redirect back to page once the oauth occurs.
+    localStorage.setItem(
+      REDIRECT_ON_LOGIN,
+      JSON.stringify(this.history.location)
+    );
     this.auth0.authorize(); // will redirect browser to Auth0 login;
   };
 
@@ -27,7 +34,11 @@ class Auth {
     this.auth0.parseHash((err, authResult) => {
       if (authResult && authResult.accessToken && authResult.idToken) {
         this.setSession(authResult);
-        this.history.push("/");
+        const storedRedirect = localStorage.getItem(REDIRECT_ON_LOGIN);
+        const redirectLocation = storedRedirect
+          ? JSON.parse(storedRedirect)
+          : "/";
+        this.history.push(redirectLocation);
       } else if (err) {
         this.history.push("/");
         alert(`Error: ${err.error}. Check the console for further details`);
@@ -64,7 +75,7 @@ class Auth {
       return false;
     }
   }
-  
+
   /* These checks are merely here for user experience, not security
   It is the server's job to validate the user is authorized when a api call
   is made. */
@@ -80,6 +91,7 @@ class Auth {
     localStorage.removeItem("id_token");
     localStorage.removeItem("expires_at");
     localStorage.removeItem("scopes");
+    localStorage.removeItem(REDIRECT_ON_LOGIN);
     this.userProfile = null;
     this.err = null;
     this.auth0.logout({
@@ -118,8 +130,6 @@ class Auth {
         }
       });
     });
-
-
 }
 
 export default Auth;
