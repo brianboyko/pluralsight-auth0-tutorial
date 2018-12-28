@@ -4,8 +4,6 @@ const jwt = require("express-jwt"); // validate JWT and set req.user;
 const jwksRsa = require("jwks-rsa"); // retrieve RSA keys from a JSON web key set (JWKS) endpoint;
 const checkScope = require("express-jwt-authz");
 
-
-
 const checkJwt = jwt({
   // dynamically provide a signing key based on the kid in the header
   // and the signing keys provided by the JWKS endpoint
@@ -41,25 +39,25 @@ app.get("/course", checkJwt, checkScope(["read:courses"]), (req, res) => {
   // and use it to query the database for the author's courses.
   // the remote api would get the scopes from the cryptographic signature,
   // *they* would check the scope too.
-  setTimeout(() => {
-    res.json({
-      courses: [
-        { id: 1, title: "Building apps with React" },
-        { id: 2, title: "Creating reusable React Components" }
-      ]
-    });
-  }, 1500);
+  res.json({
+    courses: [
+      { id: 1, title: "Building apps with React" },
+      { id: 2, title: "Creating reusable React Components" }
+    ]
+  });
 });
 
-const checkRole = (role) => (req, res, next) => {
+const checkRole = role => (req, res, next) => {
+  console.log(req.user)
   const assignedRoles = req.user["http://localhost:3000/roles"];
-  if(Array.isArray(assignedRoles) && assignedRoles.includes(role)){
+  console.log("assignedRoles", assignedRoles)
+  if (Array.isArray(assignedRoles) && assignedRoles.includes(role)) {
     return next();
   }
-  return res.status(401).send("Insufficient Role"); 
-}
+  return res.status(401).send("Insufficient Role");
+};
 
-app.get("/admin", checkJwt, checkRole('admin'), (req, res) => {
+app.get("/admin", checkJwt, checkRole("admin"), (req, res) => {
   res.json({
     message: "Hello from an admin-only API!"
   });

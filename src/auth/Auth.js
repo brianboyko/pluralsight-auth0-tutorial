@@ -2,6 +2,13 @@ import auth0 from "auth0-js";
 
 const REDIRECT_ON_LOGIN = "redirect_on_login";
 
+const privateStore = {
+  idToken: null,
+  accessToken: null,
+  scopes: null,
+  expiresAt: null
+};
+
 class Auth {
   /**
    * @param {React-Router-History} history - needed to perform redirect
@@ -19,6 +26,9 @@ class Auth {
       responseType: "token id_token",
       scope: this.requestedScopes
     });
+    window.debugAuth = () => {
+      console.log(privateStore);
+    };
   }
 
   login = () => {
@@ -49,48 +59,28 @@ class Auth {
 
   setSession = authResult => {
     // set the time the access token will expire
-    const expiresAt = JSON.stringify(
-      authResult.expiresIn * 1000 + new Date().getTime()
-    );
-    const scopes = authResult.scope || this.requestedScopes || "";
-    localStorage.setItem("access_token", authResult.accessToken);
-    localStorage.setItem("id_token", authResult.idToken);
-    // this is just for convenience. The server validates
-    // these claims, this is just so that we don't have
-    // to parse the JWT every time on the client.
-    // REMEMBER IOS DOESN'T HAVE LOCALSTORAGE
-    // might need to rewrite Auth class for that case
-    localStorage.setItem("expires_at", expiresAt);
-    localStorage.setItem("scopes", JSON.stringify(scopes));
+    privateStore.expiresAt = authResult.expiresIn * 1000 + new Date().getTime();
+    privateStore.scopes = authResult.scope || this.requestedScopes || "";
+    privateStore.accessToken = authResult.accessToken;
+    privateStore.idToken = authResult.idToken;
+    this.scheduleTokenRenewal(); 
   };
 
   /* These checks are merely here for user experience, not security
   It is the server's job to validate the user is authorized when a api call
   is made. */
-  isAuthenticated() {
-    try {
-      const expiresAt = JSON.parse(localStorage.getItem("expires_at"));
-      return new Date().getTime() < expiresAt;
-    } catch (e) {
-      return false;
-    }
-  }
+  isAuthenticated = () => new Date().getTime() < privateStore.expiresAt;
 
   /* These checks are merely here for user experience, not security
   It is the server's job to validate the user is authorized when a api call
   is made. */
-  userHasScopes(scopes) {
-    const grantedScopes = (
-      JSON.parse(localStorage.getItem("scopes")) || ""
-    ).split(" ");
-    return scopes.every(scope => grantedScopes.includes(scope));
-  }
+  userHasScopes = scopes =>
+    scopes.every(scope => privateStore.scopes.includes(scope));
 
   logout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("id_token");
-    localStorage.removeItem("expires_at");
-    localStorage.removeItem("scopes");
+    for (let key in privateStore) {
+      privateStore[key] = null;
+    }
     localStorage.removeItem(REDIRECT_ON_LOGIN);
     this.userProfile = null;
     this.err = null;
@@ -100,18 +90,7 @@ class Auth {
     });
   };
 
-  getAccessToken = () => {
-    try {
-      const accessToken = localStorage.getItem("access_token");
-      if (!accessToken) {
-        throw new Error("No access token found");
-      }
-      return accessToken;
-    } catch (e) {
-      console.log(e);
-      return null;
-    }
-  };
+  getAccessToken = () => privateStore.accessToken;
 
   getProfile = () =>
     new Promise((resolve, reject) => {
@@ -130,6 +109,26 @@ class Auth {
         }
       });
     });
+
+  renewToken = () =>
+    new Promise((resolve, reject) => {
+      this.auth0.checkSession({}, (err, result) => {
+        if (err) {
+          console.error(`Error: ${err.error} - ${err.error_description}.`);
+          reject(err);
+          return;
+        }
+        this.setSession(result);
+        resolve(result);
+      });
+    });
+
+  scheduleTokenRenewal = () => {
+    const delay = privateStore.expiresAt - Date.now();
+    if(delay > 0) {
+      setTimeout(() => this.renewToken(), delay); 
+    }
+  }
 }
 
 export default Auth;
